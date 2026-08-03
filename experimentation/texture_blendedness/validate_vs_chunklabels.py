@@ -25,10 +25,11 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import common  # noqa: E402
-import methods as methods_pkg  # noqa: E402
 import importlib
 import pkgutil
+
+import common  # noqa: E402
+import methods as methods_pkg  # noqa: E402
 
 DB = common.REPO / "training" / "labeling" / "labels.db"
 OUT = Path(__file__).resolve().parent / "outputs" / "validation"

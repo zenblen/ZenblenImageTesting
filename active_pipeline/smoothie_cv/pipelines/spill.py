@@ -15,7 +15,6 @@ argument for interface symmetry with BlendPipeline but ignores it.)
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
 
 from smoothie_cv.config import Config

@@ -180,7 +180,6 @@ def main() -> None:
 
 def _poly_inside_roi(pts: list, roi_mask) -> bool:
     """True if the polygon centroid lands inside the smoothie ROI."""
-    import numpy as np
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     cx = int(round(sum(xs) / len(xs)))

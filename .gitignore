@@ -3,6 +3,11 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.ruff_cache/
+
+# Ultralytics label caches — generated on first train from the label .txt files.
+# The datasets themselves ARE tracked (REMOTE_TRAIN.md needs them); these are not.
+*.cache
 
 # Generated outputs
 active_pipeline/outputs/

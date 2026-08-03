@@ -32,8 +32,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "texture_blendedness"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import common  # noqa: E402
 import build_inverse_dataset as B  # noqa: E402
+import common  # noqa: E402
 
 REPO = common.REPO
 WEIGHTS = REPO / "training" / "runs" / "blended-seg" / "blended-nano-v1-3" / "weights" / "best.pt"

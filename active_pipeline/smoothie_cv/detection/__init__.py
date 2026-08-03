@@ -24,7 +24,6 @@ from smoothie_cv.detection.common import (
     SmoothieType,
     _classify_smoothie,
     draw_container_overlay,
-    flatten_roi_top,
     top_edge_roughness,
 )
 
@@ -36,7 +35,6 @@ __all__ = [
     "DETECTOR_PRIORITY",
     "draw_container_overlay",
     "top_edge_roughness",
-    "flatten_roi_top",
     "_classify_smoothie",
     "SmoothieType",
     "BBox",

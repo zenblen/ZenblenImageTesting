@@ -32,13 +32,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from smoothie_cv.config import Config
 from smoothie_cv.detection import (
+    SmoothieType,
+    _classify_smoothie,
     detect_container,
     draw_container_overlay,
-    _classify_smoothie,
-    SmoothieType,
 )
 from smoothie_cv.scoring.metrics import overlay_mask
-
 
 PIPELINE_NAMES = ["blend", "spill"]
 

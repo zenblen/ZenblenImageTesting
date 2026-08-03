@@ -12,7 +12,6 @@ from smoothie_cv.config import Config
 from smoothie_cv.pipelines.base import BlendResult
 from smoothie_cv.pipelines.blend import BlendPipeline
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

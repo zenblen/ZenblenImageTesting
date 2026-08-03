@@ -1,8 +1,8 @@
 """
 Shared, detector-agnostic helpers for container detection.
 
-Colour-type classification, the straight-line top-edge prior, top-edge
-roughness, and the ROI overlay. Active YOLO logic lives in ``yolo.py``.
+Colour-type classification, top-edge roughness, and the ROI overlay.
+Active YOLO logic lives in ``yolo.py``.
 """
 
 from __future__ import annotations
@@ -36,30 +36,6 @@ def _classify_smoothie(image: np.ndarray) -> SmoothieType:
         return SmoothieType.VIVID_YELLOW
     else:
         return SmoothieType.PALE_YELLOW
-
-
-def _robust_line_fit(
-    xs: np.ndarray,
-    ys: np.ndarray,
-    iters: int = 3,
-    k: float = 2.0,
-) -> np.ndarray:
-    """Fit y = m*x + c, iteratively rejecting outliers via MAD reweighting.
-
-    Both upward spikes and downward notches in the top boundary are large
-    residuals, so a few reweighting passes pull the line onto the dominant
-    straight part of the edge. Returns polynomial coefficients ``[m, c]``.
-    """
-    coef = np.polyfit(xs, ys, 1)
-    for _ in range(iters):
-        resid = ys - np.polyval(coef, xs)
-        med = np.median(resid)
-        mad = np.median(np.abs(resid - med)) + 1e-6
-        inliers = np.abs(resid - med) < k * 1.4826 * mad
-        if inliers.sum() < 2:
-            break
-        coef = np.polyfit(xs[inliers], ys[inliers], 1)
-    return coef
 
 
 def _top_boundary(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
@@ -103,63 +79,6 @@ def top_edge_roughness(mask: np.ndarray, win_frac: float = 0.06) -> float:
     kernel = np.ones(win) / win
     smooth = np.convolve(np.pad(y, pad, mode="edge"), kernel, mode="valid")[:n]
     return float(np.std(y - smooth))
-
-
-def flatten_roi_top(
-    mask: np.ndarray,
-    top_tilt_max_deg: float = 10.0,
-) -> tuple[np.ndarray, BBox | None]:
-    """Replace the jagged top boundary of a filled ROI mask with a straight line.
-
-    The smoothie surface is physically a near-horizontal straight line, but
-    per-image colour thresholding on low-saturation (tan/beige) fills produces a
-    sawtooth top edge that oscillates around the true line — spiking up into
-    foam/rim and cutting notches down into the smoothie.
-
-    This extracts the topmost foreground row of every occupied column, fits a
-    robust line that rejects those spikes/notches as outliers, then rebuilds the
-    mask so each column is filled from the fitted line down to its original
-    bottom. Spikes above the line are trimmed; notches below it are filled. The
-    sides and bottom of the mask are preserved exactly (per-column bottom kept).
-
-    Returns (flattened_mask, bbox). If the mask is empty, returns it unchanged
-    with bbox None.
-    """
-    h = mask.shape[0]
-    boundary = _top_boundary(mask)
-    if boundary is None:
-        return mask, None
-    cols, top, bottom = boundary
-
-    xs = cols.astype(np.float64)
-    ys = top[cols].astype(np.float64)
-
-    m, c = _robust_line_fit(xs, ys)
-
-    # clamp tilt: |dy across the occupied width| limited by top_tilt_max_deg
-    max_slope = np.tan(np.deg2rad(top_tilt_max_deg))
-    if abs(m) > max_slope:
-        m = max_slope if m > 0 else -max_slope
-        # re-anchor c at the median so the clamped line still sits on the edge
-        c = float(np.median(ys - m * xs))
-
-    line_y = np.rint(m * xs + c).astype(int)
-    line_y = np.clip(line_y, 0, h - 1)
-
-    flat = np.zeros_like(mask)
-    for i, x in enumerate(cols):
-        yt = line_y[i]
-        yb = int(bottom[x])
-        if yt > yb:
-            continue  # line sits below this column's content; nothing to keep
-        flat[yt : yb + 1, x] = 255
-
-    ys2, xs2 = np.where(flat > 0)
-    if ys2.size == 0:
-        return mask, None
-    x0, x1 = int(xs2.min()), int(xs2.max())
-    y0, y1 = int(ys2.min()), int(ys2.max())
-    return flat, (x0, y0, x1 - x0 + 1, y1 - y0 + 1)
 
 
 def draw_container_overlay(image: np.ndarray, roi_mask: np.ndarray | None) -> np.ndarray:

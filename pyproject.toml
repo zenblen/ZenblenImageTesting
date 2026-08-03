@@ -1,0 +1,63 @@
+# Tool configuration only — this repo is not an installable package, so there is
+# deliberately no [project] table. Adding one would make `pip install -e .` look
+# supported when the deploy path is "copy active_pipeline/ to the Jetson".
+#
+# Why this file exists: without `pythonpath` and `norecursedirs`, pytest had to be
+# run from inside active_pipeline/ and would walk 5000+ dataset files during
+# collection. Both are fixed here.
+
+[tool.pytest.ini_options]
+# Lets `pytest` run from the repo root — tests import `smoothie_cv.*`, which
+# otherwise only resolves with cwd=active_pipeline/.
+pythonpath = ["active_pipeline"]
+testpaths = ["active_pipeline/smoothie_cv/tests"]
+# Keep collection off the 5207 dataset files and run artifacts.
+norecursedirs = [
+    "training/labeling/datasets",
+    "training/labeling/data",
+    "training/runs",
+    "*/outputs",
+    "*.egg-info",
+    ".git",
+    "__pycache__",
+]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+# Optional install: `pip install ruff`. Not in any requirements.txt, so lint is a
+# convenience, never a hard gate.
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "training/labeling/datasets",
+    "training/labeling/data",
+    "training/runs",
+    "**/outputs",
+]
+
+[tool.ruff.lint]
+# Deliberately narrow: correctness and dead code, not style opinions. A broad
+# ruleset would flood a repo that predates any linter with noise unrelated to
+# whatever an agent is actually changing.
+select = [
+    "E9",   # syntax / IO errors
+    "F",    # pyflakes: undefined names, unused imports and variables
+    "B",    # bugbear: likely bugs (mutable defaults, unused loop vars)
+    "UP",   # pyupgrade
+    "I",    # import sorting
+]
+ignore = [
+    "B008",  # function call in default arg — common and intentional in this code
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Detector re-exports exist to give callers one import surface.
+"active_pipeline/smoothie_cv/detection/__init__.py" = ["F401"]
+# Experiments prepend sys.path before importing siblings.
+"experimentation/**" = ["E402"]
+# Scoped to this ONE file, not global: `zip(targets, results)` over a streamed
+# ultralytics generator would silently misalign file_ids with predictions if the
+# lengths ever diverge. Fixing it changes prediction semantics in code outside the
+# current task, so it is deferred rather than silenced repo-wide -- new zip() calls
+# elsewhere still get flagged. See docs/testing.md "Known findings".
+"training/labeling/predict_cls.py" = ["B905"]

@@ -47,7 +47,7 @@ class Config:
     output_dir: Path = field(default_factory=lambda: Path("outputs"))
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "Config":
+    def from_yaml(cls, path: str | Path) -> Config:
         if not _YAML_AVAILABLE:
             raise ImportError("pyyaml is required to load config from YAML. pip install pyyaml")
         with open(path) as f:
@@ -55,7 +55,7 @@ class Config:
         return cls(**{k: v for k, v in data.items() if hasattr(cls, k)})
 
     @classmethod
-    def load(cls, yaml_path: str | Path | None = None) -> "Config":
+    def load(cls, yaml_path: str | Path | None = None) -> Config:
         """Load from yaml_path if given, otherwise look for config.yaml in cwd."""
         default_path = Path("config.yaml")
         if yaml_path is None and default_path.exists():

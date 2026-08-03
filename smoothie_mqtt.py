@@ -1,14 +1,14 @@
-import os
-import sys
-import json
-import time
-import queue
 import argparse
+import json
+import queue
+import sys
 import threading
-import requests
-import cv2
-from pathlib import Path
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import cv2
+import requests
 
 PIPELINE_DIR = "/home/zb/Documents/active_pipeline"
 sys.path.insert(0, PIPELINE_DIR)

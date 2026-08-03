@@ -1,0 +1,11 @@
+# Mark exported training data and run artifacts as generated. This keeps them out
+# of language stats, collapses them in diffs and reviews, and signals to tooling
+# (including coding agents) that they are not source. They stay TRACKED on purpose
+# — REMOTE_TRAIN.md builds GPU training from the committed datasets.
+training/labeling/datasets/**  linguist-generated=true
+training/runs/**              linguist-generated=true
+
+# Binary: never diff or attempt to read as text.
+*.pt      binary
+*.db      binary
+*.cache   binary

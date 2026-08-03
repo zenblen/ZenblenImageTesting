@@ -40,11 +40,12 @@ _TRAINING = _LABELING.parent
 _REPO = _TRAINING.parent
 sys.path.insert(0, str(_TRAINING))  # `import labeling`
 sys.path.insert(0, str(_REPO / "active_pipeline"))  # `import smoothie_cv`
-from labeling import db
 from smoothie_cv.config import Config
 from smoothie_cv.detection import detect_container
 from smoothie_cv.detection.chunk import detect_chunk
 from smoothie_cv.scoring.metrics import overlay_mask
+
+from labeling import db
 
 MAX_POLY_POINTS = 8       # cap on vertices per seed shape (fewer = less to edit)
 MIN_SEED_AREA = 40        # px; drop degenerate specks so seeds aren't noise

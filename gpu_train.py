@@ -30,7 +30,7 @@ def main():
     extra = sys.argv[3:]                       # e.g. --no-amp, passed straight through
     project_dir = REPO / "training" / "runs" / f"{mode}-seg"
 
-    print(f">> [1/3] pull latest dataset + code")
+    print(">> [1/3] pull latest dataset + code")
     run(["git", "pull", "--ff-only"])
 
     print(f">> [2/3] train {mode} on device {device}" + (f" {' '.join(extra)}" if extra else ""))
@@ -47,7 +47,7 @@ def main():
                  f"!! (did training finish? check training/runs/{mode}-seg/)")
     best = candidates[0]
 
-    print(f">> [3/3] push weights back")
+    print(">> [3/3] push weights back")
     run(["git", "add", str(best)])
     # commit returns nonzero if there is nothing to commit — that's fine.
     if run(["git", "commit", "-m", f"Train {mode}-seg on GPU (device {device})"],

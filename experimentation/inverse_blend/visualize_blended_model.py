@@ -17,7 +17,6 @@ Output: experimentation/inverse_blend/outputs/panels/*.jpg + outputs/index.html
 """
 from __future__ import annotations
 
-import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -27,11 +26,16 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "texture_blendedness"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import common  # noqa: E402
 import build_inverse_dataset as B  # noqa: E402
+import common  # noqa: E402
 from evaluate_blended_model import (  # noqa: E402
-    WEIGHTS, DB, GROUP_A, chunk_labeled_ids, chunk_clean_good_ids,
-    chunk_polys, predict_blended_mask,
+    DB,
+    GROUP_A,
+    WEIGHTS,
+    chunk_clean_good_ids,
+    chunk_labeled_ids,
+    chunk_polys,
+    predict_blended_mask,
 )
 
 OUT = Path(__file__).resolve().parent / "outputs"

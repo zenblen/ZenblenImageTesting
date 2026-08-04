@@ -11,7 +11,7 @@ pre-built dataset.
 
 ## On the GPU machine (first time)
 ```bash
-git clone https://github.com/JasonL1238/ZenblenImageTesting.git
+git clone https://github.com/zenblen/ZenblenImageTesting.git
 cd ZenblenImageTesting
 pip install ultralytics            # pulls torch (CUDA build) too
 ```

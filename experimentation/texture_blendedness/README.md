@@ -21,7 +21,7 @@ Add a new method by dropping another file in `methods/` with the same interface.
 
 ## Shared infra
 - `common.py` — YOLO ROI/logo extraction (cached to `outputs/mask_cache/`),
-  `scored_region()` / `core_roi()` border helpers, `render_panel()` overlay.
+  `scored_region()` border helper, `render_panel()` overlay.
 
 ## Run the comparison
 ```

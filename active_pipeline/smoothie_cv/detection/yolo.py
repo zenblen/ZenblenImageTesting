@@ -43,13 +43,20 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
 
 
 def get_yolo_roi(result, shape: tuple[int, int]) -> np.ndarray:
-    """Extract the highest-confidence instance mask from an ultralytics result,
-    resized to the full frame and hole-filled. Zeros if nothing was detected."""
+    """Extract the LARGEST instance mask from an ultralytics result, resized to
+    the full frame and hole-filled. Zeros if nothing was detected.
+
+    Selection is by AREA, not confidence. Confidence says how sure the model is
+    that a region *is* smoothie, not how much of it the region covers; 46% of
+    frames return several overlapping instances, and on a few the most-confident
+    one is a fragment covering ~70% of the liquid. Area and confidence pick the
+    same instance on all but ~0.6% of frames, so this only changes the bad ones.
+    See ../../../docs/NANO_PATCH.md for the measurements."""
     h, w = shape
     if result.masks is None or len(result.masks) == 0:
         return np.zeros((h, w), dtype=np.uint8)
-    confs = result.boxes.conf.cpu().numpy()
-    idx = int(np.argmax(confs))
+    masks = result.masks.data.cpu().numpy() > 0.5
+    idx = int(masks.reshape(len(masks), -1).sum(axis=1).argmax())
     raw = result.masks.data[idx].cpu().numpy()
     m = cv2.resize(raw, (w, h), interpolation=cv2.INTER_NEAREST)
     return fill_holes(((m > 0.5) * 255).astype(np.uint8))

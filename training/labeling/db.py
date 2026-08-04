@@ -14,9 +14,6 @@ ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "labels.db"
 IMAGES_DIR = ROOT / "data" / "images"
 CHUNK_SEED_DIR = ROOT / "data" / "polygons_chunk_seed"
-DATASET_DIR = ROOT / "dataset"
-
-VERDICTS = ("good", "corrected", "bad", "skip")
 
 # --- multi-mode labeler (app_multi.py) --------------------------------------
 # A SECOND, self-contained pipeline that shares this DB's image registry but
@@ -55,7 +52,6 @@ REVIEW_STATUSES = ("pending", "approved", "rejected")
 
 # Per-image content flags (image_flags table). 'no_smoothie' = a machinery /
 # empty-rig shot with no smoothie in frame; excluded from every pipeline.
-IMAGE_FLAGS = ("no_smoothie",)
 NO_SMOOTHIE = "no_smoothie"
 
 # Provenance values for annotations.source (see the ADD COLUMN migration below).

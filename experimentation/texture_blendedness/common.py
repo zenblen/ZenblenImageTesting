@@ -176,13 +176,6 @@ def scored_region(roi_mask: np.ndarray, logo_mask: np.ndarray | None,
     return region
 
 
-def core_roi(roi_mask: np.ndarray, erode_px: int = 15) -> np.ndarray:
-    """ROI eroded by erode_px (uint8 255/0) — drops the flag-prone border."""
-    k = 2 * erode_px + 1
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-    return cv2.erode((roi_mask > 0).astype(np.uint8) * 255, kernel)
-
-
 def sample_images(n: int) -> list[Path]:
     exts = {".jpg", ".jpeg", ".png"}
     files = sorted(p for p in IMAGES_DIR.rglob("*") if p.suffix.lower() in exts)

@@ -18,22 +18,27 @@ top_y, bot_y = first / last row containing mask
 height = bot_y - top_y
 
 if w_max < 290 or bot_y < 560:   -> UNKNOWN   # not upright & seated, don't score
-if height < 437:                 -> LOW
+if height < 435:                 -> LOW
 else:                            -> OK
 ```
 
 ### Constants — one cup class, 480x640 portrait frames
 
+Re-measured through `detect_container()` after `get_yolo_roi()` switched to
+largest-area instance selection (see [NANO_PATCH.md](NANO_PATCH.md)). The earlier
+argmax-confidence values were median 483.0 / σ 30.74 / cutoff 436.9 — within
+2 px, and the flag set is the same size, so either calibration works. Use these.
+
 | | value |
 |---|---|
-| **median height** | **483.0 px** |
-| **σ** | **30.74** |
-| **cutoff (median − 1.5σ)** | **436.9 px** |
-| trips at | 9.5% below median |
-| flags on the calibration set | 11 / 681 scored (1.62%) |
-| coverage (scored, not `unknown`) | 681 / 1108 = **61%** (63% of portrait-only frames) |
+| **median height** | **484.0 px** |
+| **σ** | **32.38** |
+| **cutoff (median − 1.5σ)** | **435.4 px** |
+| trips at | 10.0% below median |
+| flags on the calibration set | 10 / 686 scored (1.46%) |
+| coverage (scored, not `unknown`) | 686 / 1108 = **62%** (63% of portrait-only frames) |
 
-`shortfall = 1 − height / 483` — log this and trend it. Read it as "N% below a
+`shortfall = 1 − height / 484` — log this and trend it. Read it as "N% below a
 typical cup", **not** "N% empty": the cup rim sits at or above the frame edge on
 full cups (`top_y` clips at 2 px in 30 frames), so there is no rim datum to
 compute true percent-full against.
@@ -42,10 +47,10 @@ compute true percent-full against.
 
 | | p5 | p50 | p95 |
 |---|---|---|---|
-| `w_max` | 297 | **308** | 320 |
-| `bot_y` (seat line) | 567 | **581** | 596 |
+| `w_max` | 297 | **308** | 321 |
+| `bot_y` (seat line) | 567 | **581** | 597 |
 | `top_y` (liquid top) | 42 | **94** | 142 |
-| `height` | 443 | **483** | 539 |
+| `height` | 443 | **484** | 539 |
 
 If your numbers fall outside these bands the calibration does not transfer — see
 §5.
@@ -90,17 +95,17 @@ This is also why there is **one** cup class here and not two.
 
 ## 4. Known limits
 
-- **Sensitivity floor ~9.5%.** Anything subtler is inside the noise. This is an
+- **Sensitivity floor ~10%.** Anything subtler is inside the noise. This is an
   anomaly flag, not a volume gauge.
 - **Sensitivity is UNMEASURED.** There are **zero real underfills** in the 1108
-  frames. All 11 flags are false — full cups with thick foam heads. You know the
+  frames. All 10 flags are false — full cups with thick foam heads. You know the
   rule rarely cries wolf; you do **not** know it catches a real shortfall.
 - **Foam.** The mask excludes foam by the labeling standard, so `height` measures
   liquid under the head. Pale/foamy recipes read ~5% lower than vivid ones, so
   they trip earlier. `_classify_smoothie()` (already called in `run_single()`)
   gives the pale/vivid axis if you later want a per-shade baseline.
-- **At 1.5σ you get ~6x more flags than at 2σ** (11 vs 2). With no true positives
-  in the data, every extra flag is currently a false one. `median − 2σ = 421.5`
+- **At 1.5σ you get ~10x more flags than at 2σ** (10 vs 1). With no true positives
+  in the data, every extra flag is currently a false one. `median − 2σ = 419.2`
   if you want the conservative variant.
 
 ### Measured dead — do not retry
@@ -182,8 +187,8 @@ import numpy as np
 FRAME_SHAPE = (640, 480)    # portrait; landscape frames have different geometry
 W_MIN = 290                 # below this the mask is broken (width is unimodal)
 BOT_MIN = 560               # below this the cup is off-seat / tipped
-MEDIAN_H = 483.0
-CUTOFF_H = 436.9            # median - 1.5 * sd (sd = 30.74)
+MEDIAN_H = 484.0
+CUTOFF_H = 435.4            # median - 1.5 * sd (sd = 32.38)
 
 
 @dataclass(frozen=True)
@@ -311,7 +316,7 @@ class TestLiquidLevel:
 
     def test_underfill_is_low(self):
         from smoothie_cv.detection.level import assess_level
-        r = assess_level(self._mask(308, 581, 400))     # 400 < 436.9
+        r = assess_level(self._mask(308, 581, 400))     # 400 < 435.4
         assert r.status == "low" and r.shortfall > 0.1
 
     def test_tipped_cup_is_unknown_not_low(self):

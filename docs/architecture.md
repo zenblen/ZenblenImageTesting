@@ -46,7 +46,7 @@ See also: [agent guidelines](agent-guidelines.md) ·
 | `python smoothie_mqtt.py` | root | MQTT-driven live inference |
 | `python labeling/app_multi.py` | `training/` | Hand labeling UI, port 5001 |
 | `python labeling/app_review.py --mode M` | `training/` | Model-assisted review UI, port 5002 |
-| `python labeling/app_classify.py` | `training/` | Classification UI, port 5003 |
+| `python labeling/app_classify.py` | `training/` | Classification UI, port 5003 (`?task=`) |
 | `python labeling/export_multi.py --mode M` | `training/` | Build a YOLO-seg dataset |
 | `python train_multi.py --mode M` | `training/` | Train a segmentation model |
 | `python train_cls.py --task T` | `training/` | Train a classifier |
@@ -141,5 +141,6 @@ predictions stay in `predictions` / `review_status` until approved.
 | `yolo_spill_seg.pt` | `--mode spill` | Spill detection |
 | `yolo_logo_seg.pt` | `--mode logo` | Wordmark suppression (training-side only) |
 | `best_cleaning.pt` | `train_cls.py --task cleandone` | Clean/dirty classifier — **not yet wired into runtime** |
+| `yolo_xytable_cls.pt` | `train_cls.py --task xytable` | XYTable powder/no_powder classifier — **not yet wired into runtime** |
 
 Weights are binary: never read them, only copy and reference by path.

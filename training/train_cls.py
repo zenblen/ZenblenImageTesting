@@ -1,9 +1,14 @@
-"""Train a YOLO-cls classifier for a classification-labeler dataset (cleandone: dirty/clean).
+"""Train a YOLO-cls classifier for a classification-labeler dataset.
+
+Tasks (see labeling/db.py CLS_TASK_LABELS):
+    cleandone -> dirty | clean          on 'CleanDone' photos
+    xytable   -> powder | no_powder     on 'XYTable' photos
 
 Run from the ``training/`` directory (paths below are cwd-relative to training/):
 
     python labeling/export_cls.py --task cleandone
     /opt/miniconda3/bin/python train_cls.py --task cleandone
+    /opt/miniconda3/bin/python train_cls.py --task xytable
 
 Runs save to ``training/runs/<task>-cls/<name>/weights/{best,last}.pt``.
 
@@ -36,6 +41,11 @@ TASK_CFG: dict[str, dict[str, str]] = {
         "data":    str(_TRAINING / "labeling/datasets/cleandone_cls_dataset"),
         "project": str(_TRAINING / "runs/cleandone-cls"),
         "deploy":  str(_ACTIVE_CKPT / "best_cleaning.pt"),
+    },
+    "xytable": {
+        "data":    str(_TRAINING / "labeling/datasets/xytable_cls_dataset"),
+        "project": str(_TRAINING / "runs/xytable-cls"),
+        "deploy":  str(_ACTIVE_CKPT / "yolo_xytable_cls.pt"),
     },
 }
 

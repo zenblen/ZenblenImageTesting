@@ -1,4 +1,4 @@
-"""Whole-image classification labeler — dirty vs clean CleanDone photos.
+"""Whole-image classification labeler — one verdict per frame, no polygons.
 
 A FOURTH, self-contained pipeline alongside app_multi.py (polygons) and
 predict_batch.py/app_review.py (model-assisted review): no drawing, just one
@@ -6,14 +6,19 @@ verdict per image. Shares the `files` image registry with the rest of the
 labeling tool but writes ONLY to the additive `classifications` table (see
 labeling/db.py) — nothing here touches `annotations` / `mode_status`.
 
-Currently one task, ``cleandone`` (dirty/clean), scoped to
-``files.category_name = 'CleanDone'``. Deliberately does NOT join
-``image_flags``/``no_smoothie`` — that gate keys on the smoothie/container
-detector and would wrongly exclude the empty-station shots this task is about.
+Tasks (each scoped to its own ``files.category_name``, its own label set, its
+own dataset — see db.CLS_TASK_LABELS / db.TASK_CATEGORY):
+    cleandone -> dirty | clean          on 'CleanDone' photos
+    xytable   -> powder | no_powder     on 'XYTable' photos
+
+Deliberately does NOT join ``image_flags``/``no_smoothie`` — that gate keys on
+the smoothie/container detector and would wrongly exclude the empty-station and
+bare-table shots these tasks are about.
 
 Run (from ``training/``):
     python labeling/app_classify.py                # http://127.0.0.1:5003
-    #    D = dirty · C = clean · S = skip (no save) · ←/→ prev/next
+    #    ?task=xytable  switches task (default: the first in db.CLS_TASKS)
+    #    per-label hotkeys (see TASK_UI) · S = skip (no save) · ←/→ prev/next
     #    Optional: labeling/priority/<task>.txt (one file_id per line) is
     #    served FIRST by /api/next — used to bump specific images to the
     #    front of the queue (e.g. re-review candidates).
@@ -24,7 +29,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, abort, jsonify, render_template, request, send_file
 
 _LABELING = Path(__file__).resolve().parent
 _TRAINING = _LABELING.parent
@@ -36,6 +41,24 @@ from labeling import db
 app = Flask(__name__, template_folder=str(db.ROOT / "templates"),
             static_folder=str(db.ROOT / "static"))
 
+# Presentation only — hotkey + colour per label, plus banner text. Kept here
+# rather than in db.py because none of it affects stored data or the dataset.
+# Label names MUST match db.CLS_TASK_LABELS (asserted by _task_ui below), and
+# hotkeys must avoid the fixed globals: S skip, Z undo, X delete, ←/→ navigate.
+TASK_UI: dict[str, dict] = {
+    "cleandone": {
+        "title": "CleanDone classify",
+        "labels": [{"name": "dirty", "key": "d", "color": "#e0524a"},
+                   {"name": "clean", "key": "c", "color": "#39c07a"}],
+    },
+    "xytable": {
+        "title": "XYTable powder classify",
+        "labels": [{"name": "powder", "key": "p", "color": "#e0a33f"},
+                   {"name": "no_powder", "key": "n", "color": "#39c07a"}],
+    },
+}
+_RESERVED_KEYS = {"s", "z", "x"}
+
 
 def _check_task(task: str | None) -> str:
     if task not in db.CLS_TASKS:
@@ -43,9 +66,35 @@ def _check_task(task: str | None) -> str:
     return task
 
 
+def _task_ui(task: str) -> dict:
+    """UI config for a task, validated against the DB's label set so a rename
+    in db.CLS_TASK_LABELS can't silently leave an unreachable button here."""
+    ui = TASK_UI[task]
+    names = tuple(lab["name"] for lab in ui["labels"])
+    if names != db.cls_labels(task):
+        raise RuntimeError(
+            f"TASK_UI[{task!r}] labels {names} != db.cls_labels({task!r}) "
+            f"{db.cls_labels(task)} — keep them in sync"
+        )
+    keys = [lab["key"] for lab in ui["labels"]]
+    clash = _RESERVED_KEYS.intersection(keys)
+    if clash or len(set(keys)) != len(keys):
+        raise RuntimeError(f"TASK_UI[{task!r}] hotkeys {keys} clash ({clash or 'duplicate'})")
+    return ui
+
+
 @app.route("/")
 def index() -> str:
-    return send_from_directory(str(db.ROOT / "templates"), "label_classify.html")
+    """Render the labeler for ``?task=`` (default: first task in db.CLS_TASKS).
+
+    One template serves every task; the label buttons, hotkeys and progress
+    line are generated from ``TASK_UI`` + ``db.cls_labels()``.
+    """
+    task = _check_task(request.args.get("task", db.CLS_TASKS[0]))
+    ui = _task_ui(task)
+    return render_template("label_classify.html", task=task, title=ui["title"],
+                           dataset=f"{task}_cls_dataset", labels=ui["labels"],
+                           tasks=list(db.CLS_TASKS))
 
 
 @app.route("/image/<int:file_id>")
@@ -202,15 +251,16 @@ def api_seek():
 def api_classify():
     """Persist a decision for (file_id, task).
 
-    Body: {file_id, task, label in db.CLS_LABELS}. Skip is client-only (advance
-    without writing), so it never reaches here.
+    Body: {file_id, task, label in db.cls_labels(task)}. Skip is client-only
+    (advance without writing), so it never reaches here.
     """
     data = request.get_json(force=True)
     file_id = data.get("file_id")
     task = _check_task(data.get("task"))
     label = data.get("label")
-    if file_id is None or label not in db.CLS_LABELS:
-        abort(400, f"file_id required and label must be one of {db.CLS_LABELS}")
+    labels = db.cls_labels(task)
+    if file_id is None or label not in labels:
+        abort(400, f"file_id required and label must be one of {labels}")
 
     conn = db.connect()
     conn.execute(
@@ -271,7 +321,11 @@ def api_delete():
 
 @app.route("/api/progress")
 def api_progress():
-    """Per-task counts: how many of this task's category are dirty/clean/left.
+    """Per-task counts: how many of this task's category carry each label, and
+    how many are still undecided. Keys are the task's OWN label names (so
+    cleandone reports dirty/clean and xytable reports powder/no_powder) plus
+    ``labels`` — the ordered name list, so the client can render without
+    knowing the vocabulary.
 
     Also reports this task's OWN priority-queue counts (from
     ``labeling/priority/<task>.txt``), mirroring app_multi's ``/api/progress``:
@@ -288,14 +342,16 @@ def api_progress():
             "SELECT COUNT(*) c FROM files WHERE downloaded = 1 AND category_name = ?",
             (category,),
         ).fetchone()["c"]
-        counts = {label: 0 for label in db.CLS_LABELS}
+        labels = db.cls_labels(t)
+        counts = {label: 0 for label in labels}
         for r in conn.execute(
             "SELECT c.label, COUNT(*) n FROM classifications c "
             "JOIN files f ON f.file_id = c.file_id "
             "WHERE c.task = ? AND f.category_name = ? GROUP BY c.label",
             (t, category),
         ):
-            counts[r["label"]] = r["n"]
+            if r["label"] in counts:  # defensive: ignore stale/renamed labels
+                counts[r["label"]] = r["n"]
         decided = sum(counts.values())
         priority = _priority_ids(t)
         priority_remaining = 0
@@ -310,7 +366,8 @@ def api_progress():
                 )
             }
             priority_remaining = sum(1 for fid in priority if fid in undecided)
-        out["tasks"][t] = {**counts, "total": total, "decided": decided,
+        out["tasks"][t] = {**counts, "labels": list(labels),
+                            "total": total, "decided": decided,
                             "remaining": total - decided,
                             "priority_total": len(priority),
                             "priority_remaining": priority_remaining}
@@ -325,6 +382,12 @@ def main() -> None:
     args = parser.parse_args()
     db.ensure_dirs()
     db.connect().close()  # create schema (incl. classifications table) up front
+    # Validate every task's UI config now, so a label/hotkey mismatch fails at
+    # launch instead of on the first request to that task.
+    for task in db.CLS_TASKS:
+        _task_ui(task)
+        print(f"  {task:<10} ({'/'.join(db.cls_labels(task))})"
+              f"  ->  http://{args.host}:{args.port}/?task={task}")
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 

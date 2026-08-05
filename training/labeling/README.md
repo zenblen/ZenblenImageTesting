@@ -134,44 +134,74 @@ false-flagged; keep the threshold low (default 0.25 = any detection).
 ## Classification track (current) — `app_classify.py`
 
 A FOURTH, self-contained pipeline: whole-image classification instead of
-polygons. First task: **cleandone** — is a `CleanDone`-category station photo
-`dirty` or `clean`? One label per image (no drawing), trained as a YOLO11n-cls
-model rather than YOLO-seg. Shares the `files` registry + `data/images/` with
-the rest of the tool but writes only to its own `classifications` table
+polygons. One label per image (no drawing), trained as a YOLO11n-cls model
+rather than YOLO-seg. Shares the `files` registry + `data/images/` with the rest
+of the tool but writes only to its own `classifications` table
 (`labeling/db.py`) — the seg tables are untouched.
 
-```bash
-# 1. Pull CleanDone images (category filter already supported by download.py).
-python labeling/download.py --start '2026-01-01 00:00:00' \
-                            --end   '2026-07-22 00:00:00' --category CleanDone
-#    -> only images with category_name='CleanDone' feed this task; widen the
-#       date range to build up a few hundred (15 in the DB as of this writing).
+Each task is **independent**: its own Files-API category, its own label set, its
+own dataset, its own checkpoint. Nothing is shared but the image registry.
 
-# 2. Label. D = dirty · C = clean · S = skip (no save) · ←/→ prev/next.
+| Task | Category | Labels | Hotkeys | Checkpoint |
+|---|---|---|---|---|
+| `cleandone` | `CleanDone` | `dirty` / `clean` | D / C | `best_cleaning.pt` |
+| `xytable` | `XYTable` | `powder` / `no_powder` | P / N | `yolo_xytable_cls.pt` |
+
+The three per-task registries that define a task live in `labeling/db.py`:
+`CLS_TASK_LABELS` (vocabulary), `TASK_CATEGORY` (image source), `CLS_POSITIVE`
+(which class `predict_cls.py` ranks by). The buttons/hotkeys/colours live in
+`app_classify.TASK_UI`, validated against `db.cls_labels()` at launch.
+
+```bash
+# 1. Pull the task's category (download.py already filters by category).
+python labeling/download.py --start '2026-07-07 00:00:00' \
+                            --end   '2026-08-04 00:00:00' --category XYTable
+#    XYTable also emits video/mp4; the default --type image/jpg excludes it.
+#    Volume is modest — ~100 jpgs / 2 weeks, ~409 over 4 months. Widen the
+#    range (in <=2-week chunks; the API 500s on multi-month windows) to build
+#    up a few hundred.
+
+# 2. Label. Per-label hotkeys · S = skip (no save) · Z = undo · ←/→ prev/next.
 python labeling/app_classify.py                    # http://127.0.0.1:5003
-#    ← reaches ANY earlier image (even ones already decided) to re-classify.
+#    ?task=xytable selects the task (default: first in db.CLS_TASKS); the
+#    banner carries a switch link. ← reaches ANY earlier image to re-classify.
 
 # 3. Export a folder-per-class dataset (no data.yaml — that's a cls-only layout).
-python labeling/export_cls.py --task cleandone
-#    -> datasets/cleandone_cls_dataset/{train,val,test}/{dirty,clean}/*.jpg
+python labeling/export_cls.py --task xytable
+#    -> datasets/xytable_cls_dataset/{train,val,test}/{powder,no_powder}/*.jpg
 
 # 4. Train (conda env; yolo11n-cls, imgsz 224).
-/opt/miniconda3/bin/python train_cls.py --task cleandone
-#    -> runs/cleandone-cls/cleandone-nano-v1/weights/best.pt
+/opt/miniconda3/bin/python train_cls.py --task xytable
+#    -> runs/xytable-cls/xytable-nano-v1/weights/best.pt
 
-# 5. Deploy (path printed at end of training).
-cp runs/cleandone-cls/cleandone-nano-v1/weights/best.pt checkpoints/best_cleaning.pt
-cp runs/cleandone-cls/cleandone-nano-v1/weights/best.pt ../active_pipeline/checkpoints/best_cleaning.pt
+# 5. Deploy (paths printed at end of training).
+cp runs/xytable-cls/xytable-nano-v1/weights/best.pt checkpoints/yolo_xytable_cls.pt
+cp runs/xytable-cls/xytable-nano-v1/weights/best.pt ../active_pipeline/checkpoints/yolo_xytable_cls.pt
+
+# 6. Optional — active-learning triage once a first model exists: rank the
+#    undecided pool by P(powder) so the next labeling pass hits the signal.
+/opt/miniconda3/bin/python labeling/predict_cls.py --task xytable --write-priority
 ```
 
-Not yet wired into `active_pipeline/run.py` / `smoothie_cv` inference — this
-track currently only produces `best.pt`. Runtime integration is a deliberate
-follow-up once the classifier's accuracy is validated.
+### Adding another classification task
 
-Note: this task deliberately does **not** use the `no_smoothie` /
+1. `db.py` — add to `CLS_TASKS`, `CLS_TASK_LABELS`, `CLS_POSITIVE`,
+   `CLS_WEIGHTS`, `TASK_CATEGORY`.
+2. `app_classify.TASK_UI` — title + one `{name, key, color}` per label. Keys
+   `s`/`z`/`x` are reserved; a mismatch with `CLS_TASK_LABELS` raises at launch.
+3. `export_cls.TASK_DIRS` and `train_cls.TASK_CFG` — one entry each.
+
+No template or JS change is needed — `label_classify.html` renders whatever
+label set the server hands it.
+
+Neither task is wired into `active_pipeline/run.py` / `smoothie_cv` inference —
+this track currently only produces `best.pt`. Runtime integration is a
+deliberate follow-up once each classifier's accuracy is validated.
+
+Note: these tasks deliberately do **not** use the `no_smoothie` /
 `flag_smoothie_presence.py` gate — that gate keys on the smoothie/container
-detector and would wrongly exclude the empty-station shots CleanDone images
-are made of.
+detector and would wrongly exclude the empty-station and bare-table shots that
+CleanDone and XYTable images are made of.
 
 ---
 

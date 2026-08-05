@@ -1,7 +1,10 @@
 """Render the fill-level measurement on three real frames."""
-import json, sys
+import json
+import sys
 from pathlib import Path
-import cv2, numpy as np
+
+import cv2
+import numpy as np
 
 ROOT = Path("/Users/jasonli/Documents/GitHub/ZenblenImageTesting")
 sys.path.insert(0, str(ROOT / "active_pipeline"))

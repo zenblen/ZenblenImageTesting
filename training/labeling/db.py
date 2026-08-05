@@ -25,17 +25,23 @@ CHUNK_SEED_DIR = ROOT / "data" / "polygons_chunk_seed"
 #   spill    -> smoothie outside the cup  -> class 0: spill
 #   logo     -> the zenblen logo/wordmark -> class 0: logo
 #   chunk    -> an unblended lump/chunk   -> class 0: chunk
+#   powder   -> spilled powder on the table -> class 0: powder
+#               (XYTable frames; localised deposits on the steel plate.
+#               A whole-image classifier could not see them -- a ~60x40px
+#               deposit survives a 224px resize as ~10x7px -- so this is a
+#               segmentation pass. See the xytable CLS task below, which
+#               this supersedes for model training.)
 #   unmixed  -> non-chunk unblending      -> class 0: unmixed
 #               (streaks, unmixed color patches, gradients/layering, watery/
 #               diluted zones). Small isolated speckle — seeds/chia/blueberry
 #               skin — is normal recipe texture and is NOT marked. This is the
 #               failure mode the chunk model structurally misses (no discrete
 #               blob to find); it is a SEPARATE additive class, chunk untouched.
-# One image labeled in all five modes yields five SEPARATE image+label pairs,
+# One image labeled in all six modes yields six SEPARATE image+label pairs,
 # one per dataset — never a single file with mixed-class labels.
-MODES = ("standard", "spill", "logo", "chunk", "unmixed")
+MODES = ("standard", "spill", "logo", "chunk", "unmixed", "powder")
 MODE_CLASS_NAMES = {"standard": "smoothie", "spill": "spill", "logo": "logo",
-                    "chunk": "chunk", "unmixed": "unmixed"}
+                    "chunk": "chunk", "unmixed": "unmixed", "powder": "powder"}
 # Persisted statuses. "skip" is deliberately NOT stored (Skip = advance without
 # writing state, so the image stays undecided and reappears later).
 MODE_STATUSES = ("labeled", "clean")
@@ -68,6 +74,7 @@ MODE_WEIGHTS = {
     "logo": CHECKPOINTS_DIR / "yolo_logo_seg.pt",
     "chunk": CHECKPOINTS_DIR / "yolo_chunk_seg.pt",
     "unmixed": CHECKPOINTS_DIR / "yolo_unmixed_seg.pt",
+    "powder": CHECKPOINTS_DIR / "yolo_powder_seg.pt",
 }
 
 # --- classification labeler (app_classify.py) --------------------------------
@@ -78,15 +85,37 @@ MODE_WEIGHTS = {
 # (`labels`, `annotations`, `mode_status`, `predictions`, `review_status`) are
 # never touched, and `db.MODES` is not extended with classification tasks.
 #   cleandone -> is this CleanDone station photo dirty or clean?
-CLS_TASKS = ("cleandone",)
-CLS_LABELS = ("dirty", "clean")
+#   xytable   -> is there spilled/residual powder on the XY table in this shot?
+# Each task is an INDEPENDENT pass over its OWN category of images and carries
+# its OWN label set — they are NOT a shared vocabulary. Label strings become
+# folder names in the exported YOLO-cls dataset, so keep them filesystem-safe.
+CLS_TASKS = ("cleandone", "xytable")
+CLS_TASK_LABELS: dict[str, tuple[str, ...]] = {
+    "cleandone": ("dirty", "clean"),
+    "xytable": ("powder", "no_powder"),
+}
+# The "something is wrong" class per task — the one predict_cls.py ranks by for
+# active-learning triage (a weak model finds the most signal in its top hits).
+CLS_POSITIVE = {
+    "cleandone": "dirty",
+    "xytable": "powder",
+}
 CLS_WEIGHTS = {
     "cleandone": CHECKPOINTS_DIR / "best_cleaning.pt",
+    "xytable": CHECKPOINTS_DIR / "yolo_xytable_cls.pt",
 }
 # Files-API category each task's images are drawn from (files.category_name).
+# Verified against the live Files API — do not guess these strings.
 TASK_CATEGORY = {
     "cleandone": "CleanDone",
+    "xytable": "XYTable",
 }
+
+
+def cls_labels(task: str) -> tuple[str, ...]:
+    """Label set for a classification task. Raises KeyError on an unknown task,
+    so a typo fails loudly instead of silently exporting an empty dataset."""
+    return CLS_TASK_LABELS[task]
 
 
 def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
@@ -195,7 +224,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS classifications (
             file_id    INTEGER NOT NULL REFERENCES files(file_id),
             task       TEXT NOT NULL,      -- one of db.CLS_TASKS
-            label      TEXT NOT NULL,      -- one of db.CLS_LABELS
+            label      TEXT NOT NULL,      -- one of db.cls_labels(task)
             labeled_at TEXT NOT NULL,
             PRIMARY KEY (file_id, task)
         );

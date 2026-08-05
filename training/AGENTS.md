@@ -28,7 +28,8 @@ Flask UIs: `labeling/app_multi.py` (hand, :5001) · `app_review.py` (model-assis
 Exporters: `export_multi.py` (seg) · `export_cls.py` (cls). Prediction staging:
 `predict_batch.py`. Training: `train_multi.py` (`MODE_CFG`) · `train_cls.py`.
 
-Modes: `standard` · `spill` · `logo` · `chunk` · `unmixed` · `blended`.
+Seg modes: `standard` · `spill` · `logo` · `chunk` · `unmixed` · `powder` · `blended`.
+Cls tasks (`app_classify.py`, own label set each): `cleandone` · `xytable`.
 Per-file detail: [../docs/repository-map.md](../docs/repository-map.md).
 Workflow detail: [labeling/README.md](labeling/README.md) — long, read only the
 section you need.
@@ -39,7 +40,8 @@ section you need.
   predictions stay in `predictions` / `review_status` until approved. Never
   shortcut this gate.
 - `labels.db` is SQLite — **query it, never read it as text.**
-- Adding a mode means editing `train_multi.py:MODE_CFG` *and* exporting a dataset.
+- Adding a mode/task means editing `train_multi.py:MODE_CFG` / `train_cls.py:TASK_CFG`
+  *and* exporting a dataset. Cls tasks: see the checklist in `labeling/README.md`.
 - Do not import from `active_pipeline/`; this tree uses its own
   `training/checkpoints/` weight mirror.
 

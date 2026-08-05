@@ -9,14 +9,18 @@ classification (`yolo11n-cls.pt`) expects:
       val/dirty/*.jpg     val/clean/*.jpg
       test/dirty/*.jpg    test/clean/*.jpg
 
+Class folders come from ``db.cls_labels(task)``, so each task uses its OWN
+vocabulary — ``xytable`` exports ``{powder,no_powder}/`` instead.
+
 No data.yaml — train_cls.py passes the dataset ROOT directory as `data=`.
 
 Exported filenames are task-prefixed (``cleandone_4821.jpg``) so any file is
 self-identifying even out of its folder.
 
 Run:
-  python labeling/export_cls.py                   # all tasks (just cleandone today)
+  python labeling/export_cls.py                   # every task in db.CLS_TASKS
   python labeling/export_cls.py --task cleandone --val 0.15 --test 0.10
+  python labeling/export_cls.py --task xytable
 """
 from __future__ import annotations
 
@@ -35,6 +39,7 @@ from labeling import db
 # Default output dir per task (under labeling/datasets/, separate from runtime checkpoints).
 TASK_DIRS = {
     "cleandone": db.ROOT / "datasets" / "cleandone_cls_dataset",
+    "xytable": db.ROOT / "datasets" / "xytable_cls_dataset",
 }
 
 
@@ -50,13 +55,14 @@ def _split_ids(ids: list[int], val_frac: float, test_frac: float):
 
 def export_task(task: str, out: Path, val_frac: float, test_frac: float) -> None:
     category = db.TASK_CATEGORY[task]
+    labels = db.cls_labels(task)
     # Wipe prior export first: the split is by sorted file_id + fraction (per
     # label), so adding images shifts boundaries — recreate clean to avoid a
     # stale file lingering in two splits (train/val/test leakage).
     for split in ("train", "val", "test"):
         if (out / split).exists():
             shutil.rmtree(out / split)
-        for label in db.CLS_LABELS:
+        for label in labels:
             (out / split / label).mkdir(parents=True, exist_ok=True)
 
     conn = db.connect()
@@ -73,7 +79,7 @@ def export_task(task: str, out: Path, val_frac: float, test_frac: float) -> None
         print(f"[{task}] no classified images — skipping")
         return
 
-    by_label: dict[str, list[int]] = {label: [] for label in db.CLS_LABELS}
+    by_label: dict[str, list[int]] = {label: [] for label in labels}
     missing = 0
     for r in rows:
         fid, label = r["file_id"], r["label"]
@@ -86,7 +92,7 @@ def export_task(task: str, out: Path, val_frac: float, test_frac: float) -> None
     if missing:
         print(f"[{task}] skipped {missing}: image missing on disk")
 
-    counts = {split: {label: 0 for label in db.CLS_LABELS} for split in ("train", "val", "test")}
+    counts = {split: {label: 0 for label in labels} for split in ("train", "val", "test")}
     for label, ids in by_label.items():
         train, val, test = _split_ids(ids, val_frac, test_frac)
         for split, split_ids in (("train", train), ("val", val), ("test", test)):
@@ -100,7 +106,7 @@ def export_task(task: str, out: Path, val_frac: float, test_frac: float) -> None
     print(f"[{task}] exported {total} images -> {out}")
     for split in ("train", "val", "test"):
         c = counts[split]
-        print(f"[{task}]   {split}: " + " ".join(f"{label}={c[label]}" for label in db.CLS_LABELS))
+        print(f"[{task}]   {split}: " + " ".join(f"{label}={c[label]}" for label in labels))
     for label, ids in by_label.items():
         if len(ids) < 20:
             print(f"[{task}]   WARNING: only {len(ids)} '{label}' images — "

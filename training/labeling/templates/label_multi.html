@@ -10,6 +10,7 @@
   :root[data-mode="logo"]     { --mode:#a06cd5; --mode-dim:rgba(160,108,213,.20); }
   :root[data-mode="chunk"]    { --mode:#e0524a; --mode-dim:rgba(224,82,74,.20); }
   :root[data-mode="unmixed"]  { --mode:#2ec5c5; --mode-dim:rgba(46,197,197,.20); }
+  :root[data-mode="powder"]   { --mode:#e0a33f; --mode-dim:rgba(224,163,63,.20); }
 
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
@@ -40,6 +41,7 @@
   .modebtn[data-m="logo"].active     { background:#a06cd5; color:#0d0f12; border-color:#a06cd5; }
   .modebtn[data-m="chunk"].active    { background:#e0524a; color:#0d0f12; border-color:#e0524a; }
   .modebtn[data-m="unmixed"].active  { background:#2ec5c5; color:#0d0f12; border-color:#2ec5c5; }
+  .modebtn[data-m="powder"].active   { background:#e0a33f; color:#0d0f12; border-color:#e0a33f; }
   #layercount { color:var(--muted); font-size:12px; }
   #layercount b { color:var(--mode); }
 
@@ -91,6 +93,7 @@
   <button class="modebtn" data-m="logo">3 · Logo</button>
   <button class="modebtn" data-m="chunk">4 · Chunk</button>
   <button class="modebtn" data-m="unmixed">5 · Unmixed</button>
+  <button class="modebtn" data-m="powder">6 · Powder</button>
   <span class="spacer" style="flex:1"></span>
   <span id="layercount"></span>
 </div>
@@ -124,7 +127,7 @@
 
     <h2>Modes</h2>
     <ul>
-      <li><span class="key">1</span>/<span class="key">2</span>/<span class="key">3</span>/<span class="key">4</span> switch pipeline (keeps image)</li>
+      <li><span class="key">1</span>&hellip;<span class="key">6</span> switch pipeline (keeps image)</li>
       <li><span class="key">←</span>/<span class="key">→</span> prev / next (no save)</li>
       <li><span class="key">←</span> goes back to ANY earlier image to re-edit — even if unchanged this run (banner shows <i>was: …</i>)</li>
     </ul>

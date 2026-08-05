@@ -11,8 +11,10 @@ const MODES = {
   logo:     { name: "MODE 3 · LOGO",               dataset: "→ logo_dataset",     color: "#a06cd5", seedEndpoint: null              },
   chunk:    { name: "MODE 4 · CHUNK (unblended)",  dataset: "→ chunk_dataset",    color: "#e0524a", seedEndpoint: "/api/chunk_seed" },
   unmixed:  { name: "MODE 5 · UNMIXED (streaks)",  dataset: "→ unmixed_dataset",  color: "#2ec5c5", seedEndpoint: null              },
+  powder:   { name: "MODE 6 · POWDER (on table)",  dataset: "→ powder_dataset",   color: "#e0a33f", seedEndpoint: null              },
 };
-const KEY_TO_MODE = { "1": "standard", "2": "spill", "3": "logo", "4": "chunk", "5": "unmixed" };
+const KEY_TO_MODE = { "1": "standard", "2": "spill", "3": "logo", "4": "chunk", "5": "unmixed",
+                      "6": "powder" };
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -20,7 +22,13 @@ const doneEl = document.getElementById("done");
 const frameEl = document.getElementById("frame");
 const fileidEl = document.getElementById("fileid");
 
-let mode = "spill";        // default to the primary new pipeline
+// ?mode=<m> picks the initial pipeline so a deep link opens the right pass.
+// Falls back to spill (the primary hand pipeline) for a bare URL or an
+// unknown value, so a typo cannot leave the UI in a mode the API rejects.
+let mode = (() => {
+  const m = new URLSearchParams(location.search).get("mode");
+  return m && MODES[m] ? m : "spill";
+})();
 let fileId = null;
 let shapes = [];           // [[[x,y],...], ...]  committed + active polygons
 let activeIdx = 0;         // index into shapes currently being drawn/edited
@@ -260,7 +268,8 @@ function applyTheme() {
   document.documentElement.dataset.mode = mode;
   document.getElementById("modename").textContent = MODES[mode].name;
   document.getElementById("dataset").textContent = MODES[mode].dataset;
-  document.title = { standard: "🟢", spill: "🟠", logo: "🟣", chunk: "🔴", unmixed: "🔵" }[mode] + " label · " + mode;
+  document.title = ({ standard: "🟢", spill: "🟠", logo: "🟣", chunk: "🔴",
+                      unmixed: "🔵", powder: "🟡" }[mode] ?? "⚪") + " label · " + mode;
   document.querySelectorAll(".modebtn").forEach((b) =>
     b.classList.toggle("active", b.dataset.m === mode));
 }

@@ -53,6 +53,14 @@ MODE_CFG: dict[str, dict[str, str]] = {
         "project": str(_TRAINING / "runs/unmixed-seg"),
         "deploy":  str(_ACTIVE_CKPT / "yolo_unmixed_seg.pt"),
     },
+    # Powder spilled on the XY table. Localised deposits on a steel plate --
+    # segmentation, because whole-image classification could not see them
+    # (a ~60x40px deposit survives a 224px resize as ~10x7px).
+    "powder": {
+        "data":    str(_TRAINING / "labeling/datasets/powder_dataset/data.yaml"),
+        "project": str(_TRAINING / "runs/powder-seg"),
+        "deploy":  str(_TRAIN_CKPT / "yolo_powder_seg.pt"),
+    },
     # Inverse-of-chunks experiment: class 'blended' = ROI - human chunks. Built
     # by experimentation/inverse_blend/build_inverse_dataset.py (NOT a hand mode,
     # so it is absent from db.MODES). See that script for the known caveat.

@@ -1,7 +1,8 @@
-"""Run a trained YOLO-cls classifier over undecided images and rank them by
-P(dirty) — active-learning triage: feed the ranked list into
+"""Run a trained YOLO-cls classifier over undecided images and rank them by the
+task's positive class (``db.CLS_POSITIVE``: cleandone -> dirty, xytable ->
+powder) — active-learning triage: feed the ranked list into
 ``labeling/priority/<task>.txt`` so a human reviews the model's most-likely-
-dirty candidates first, where a weak/early model finds the most signal.
+positive candidates first, where a weak/early model finds the most signal.
 
 Does NOT write to `classifications` — this is a read-only scoring pass; the
 human is still the label of record (mirrors predict_batch.py's separation of
@@ -14,6 +15,7 @@ Run under the conda python (has ultralytics + torch); CPU, matching train_cls.py
   /opt/miniconda3/bin/python labeling/predict_cls.py --task cleandone \
       --ids 223743-229285 --weights runs/cleandone-cls/cleandone-nano-v1/weights/best.pt \
       --write-priority
+  /opt/miniconda3/bin/python labeling/predict_cls.py --task xytable --write-priority
 """
 from __future__ import annotations
 
@@ -63,7 +65,8 @@ def _targets(conn, task: str, ids: list[int] | None) -> list[int]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Score undecided images by P(dirty) for triage")
+    ap = argparse.ArgumentParser(
+        description="Score undecided images by P(positive class) for triage")
     ap.add_argument("--task", required=True, choices=db.CLS_TASKS)
     ap.add_argument("--weights", default=None,
                     help="default: db.CLS_WEIGHTS[task] (deployed checkpoint)")
@@ -72,7 +75,7 @@ def main() -> None:
                     "(default: every undecided image for the task)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--write-priority", action="store_true",
-                    help="write the ranked (highest P(dirty) first) ids into "
+                    help="write the ranked (highest P(positive) first) ids into "
                     "labeling/priority/<task>.txt, prepended before any existing "
                     "entries not already covered by this run")
     args = ap.parse_args()
@@ -93,17 +96,24 @@ def main() -> None:
 
     from ultralytics import YOLO
     model = YOLO(str(weights))
-    dirty_idx = next(i for i, name in model.names.items() if name == "dirty")
+    # Class order comes from the checkpoint's own names, not our label tuple —
+    # ultralytics indexes folder-per-class datasets alphabetically, so relying
+    # on db.cls_labels() order here would silently rank the wrong class.
+    positive = db.CLS_POSITIVE[args.task]
+    pos_idx = next((i for i, name in model.names.items() if name == positive), None)
+    if pos_idx is None:
+        sys.exit(f"{weights} has classes {sorted(model.names.values())} — "
+                 f"no '{positive}' class; wrong task's weights?")
 
     paths = [str(db.IMAGES_DIR / f"{fid}.jpg") for fid in targets]
     scored: list[tuple[int, float]] = []
     results = model.predict(paths, device="cpu", verbose=False, stream=True)
     for fid, r in zip(targets, results):
-        p_dirty = float(r.probs.data[dirty_idx])
-        scored.append((fid, p_dirty))
+        p_pos = float(r.probs.data[pos_idx])
+        scored.append((fid, p_pos))
 
     scored.sort(key=lambda t: t[1], reverse=True)
-    print(f"[{args.task}] top 10 by P(dirty):")
+    print(f"[{args.task}] top 10 by P({positive}):")
     for fid, p in scored[:10]:
         print(f"  {fid}: {p:.3f}")
 
@@ -117,7 +127,8 @@ def main() -> None:
                 if line and line.isdigit() and int(line) not in ranked_ids:
                     existing.append(int(line))
         lines = [
-            f"# predict_cls.py --task {args.task}: {len(ranked_ids)} images ranked by P(dirty) desc",
+            f"# predict_cls.py --task {args.task}: {len(ranked_ids)} images "
+            f"ranked by P({positive}) desc",
         ] + [str(fid) for fid in ranked_ids]
         if existing:
             lines.append("# carried over from prior priority list")

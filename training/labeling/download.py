@@ -90,14 +90,25 @@ def _record_files(conn, files: list[dict]) -> None:
     conn.commit()
 
 
-def _download_pending(conn, session: requests.Session, timeout: float) -> tuple[int, int, int]:
-    """Download every not-yet-downloaded file with a non-empty url.
+def _download_pending(conn, session: requests.Session, timeout: float,
+                      category: str | None = None) -> tuple[int, int, int]:
+    """Download not-yet-downloaded files with a non-empty url.
+
+    ``category`` scopes the pass to one ``files.category_name``. Without it this
+    drains the WHOLE pending backlog across every category — which is the right
+    behaviour for resuming an interrupted pull, but a nasty surprise when you
+    asked for one category: ``--category XYTable`` would spend its time fetching
+    thousands of pending CleanDone images and never reach the 162 you wanted.
+    main() therefore passes the requested category through by default.
 
     Returns (downloaded, skipped_existing, skipped_no_url).
     """
-    rows = conn.execute(
-        "SELECT file_id, file_url FROM files WHERE downloaded = 0"
-    ).fetchall()
+    sql = "SELECT file_id, file_url FROM files WHERE downloaded = 0"
+    params: tuple = ()
+    if category:
+        sql += " AND category_name = ?"
+        params = (category,)
+    rows = conn.execute(sql, params).fetchall()
     downloaded = skipped_existing = skipped_no_url = 0
     total = len(rows)
     for i, row in enumerate(rows, 1):
@@ -140,6 +151,10 @@ def main() -> None:
                         help="API key (default: ZENBLEN_API_KEY env var)")
     parser.add_argument("--list-only", action="store_true",
                         help="Fetch + record metadata but do not download images")
+    parser.add_argument("--backfill-all", action="store_true",
+                        help="Download EVERY pending image in the DB, not just "
+                        "--category's. Use to resume an interrupted pull; "
+                        "without --category it is already the behaviour.")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="Per-request timeout in seconds (default: 60)")
     args = parser.parse_args()
@@ -163,8 +178,13 @@ def main() -> None:
         print("--list-only: metadata recorded, skipping downloads")
         return
 
+    # Scope the download pass to --category unless --backfill-all is asked for,
+    # so a single-category pull doesn't drain an unrelated backlog first.
+    scope = None if args.backfill_all else args.category
+    if scope:
+        print(f"downloading pending {scope} images only (--backfill-all for every category)")
     with requests.Session() as session:
-        dl, skip_ex, skip_no_url = _download_pending(conn, session, args.timeout)
+        dl, skip_ex, skip_no_url = _download_pending(conn, session, args.timeout, scope)
     print(f"done: {dl} downloaded, {skip_ex} already on disk, "
           f"{skip_no_url} skipped (empty url)")
 

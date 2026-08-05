@@ -1,9 +1,7 @@
 <meta charset="utf-8">
-<title>Classify labeling</title>
+<title>{{ title }}</title>
 <style>
-  :root { --bg:#14161a; --panel:#1e2127; --fg:#e6e8eb; --muted:#8b94a3;
-          --dirty:#e0524a; --dirty-dim:rgba(224,82,74,.20);
-          --clean:#39c07a; --clean-dim:rgba(57,192,122,.18); }
+  :root { --bg:#14161a; --panel:#1e2127; --fg:#e6e8eb; --muted:#8b94a3; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
          font:14px/1.4 system-ui, sans-serif; }
@@ -21,14 +19,16 @@
             background:#0d0f12; color:#ffd23f; font-size:12px; font-weight:800;
             letter-spacing:.06em; }
   #banner #priobadge.on { display:inline; }
+  #banner a.switch { color:var(--muted); font-weight:600; font-size:12px;
+            text-decoration:none; border:1px solid #4a5058; border-radius:8px;
+            padding:2px 8px; }
+  #banner a.switch:hover { color:var(--fg); border-color:#6a7078; }
   #counts .prio { color:#ffd23f; font-weight:600; }
 
   main { display:flex; height:calc(100vh - 41px); }
   #stage { flex:1; display:flex; align-items:center; justify-content:center;
            overflow:hidden; position:relative; background:#0f1013; }
   #frame { border:6px solid #3a3f49; max-width:100%; max-height:100%; display:flex; }
-  #frame.dirty { border-color:var(--dirty); }
-  #frame.clean { border-color:var(--clean); }
   img#photo { display:block; max-width:100%; max-height:calc(100vh - 80px); }
 
   aside { width:280px; padding:16px; background:var(--panel);
@@ -38,8 +38,6 @@
   .btn { display:block; width:100%; text-align:left; padding:9px 12px; margin:6px 0;
          border-radius:8px; border:1px solid #3a3f49; background:#2a2e36;
          color:var(--fg); cursor:pointer; font-size:13px; font-weight:600; }
-  .btn.dirty { background:var(--dirty-dim); border-color:var(--dirty); color:var(--dirty); }
-  .btn.clean { background:var(--clean-dim); border-color:var(--clean); color:var(--clean); }
   .btn.danger { background:transparent; border-color:#5a2320; color:#e0524a; }
   .btn.danger:hover:not(:disabled) { background:rgba(224,82,74,.12); }
   .btn:disabled { opacity:.4; cursor:not-allowed; }
@@ -55,10 +53,13 @@
 </style>
 
 <div id="banner">
-  <span>CleanDone classify</span>
-  <span class="task">→ cleandone_cls_dataset</span>
+  <span>{{ title }}</span>
+  <span class="task">&rarr; {{ dataset }}</span>
   <span class="spacer"></span>
-  <span id="priobadge">★ PRIORITY</span>
+  {% for t in tasks if t != task %}
+  <a class="switch" href="/?task={{ t }}">switch to {{ t }}</a>
+  {% endfor %}
+  <span id="priobadge">&#9733; PRIORITY</span>
   <span id="wasbadge"></span>
   <span id="fileid"></span>
 </div>
@@ -66,12 +67,15 @@
 <main>
   <div id="stage">
     <div id="frame"><img id="photo"></div>
-    <div id="done">🎉 nothing left to classify.</div>
+    <div id="done">&#127881; nothing left to classify.</div>
   </div>
   <aside>
     <h2>Verdict</h2>
-    <button class="btn dirty" id="btnDirty">Dirty<span class="k">D</span></button>
-    <button class="btn clean" id="btnClean">Clean<span class="k">C</span></button>
+    {% for lab in labels %}
+    <button class="btn verdict" data-label="{{ lab.name }}"
+            style="background:{{ lab.color }}30; border-color:{{ lab.color }}; color:{{ lab.color }};"
+      >{{ lab.name }}<span class="k">{{ lab.key | upper }}</span></button>
+    {% endfor %}
     <button class="btn" id="btnSkip">Skip (no save)<span class="k">S</span></button>
     <button class="btn" id="btnUndo">Undo last<span class="k">Z</span></button>
 
@@ -80,8 +84,8 @@
 
     <h2>Navigate</h2>
     <ul>
-      <li><span class="key">←</span>/<span class="key">→</span> prev / next</li>
-      <li><span class="key">←</span> goes back to ANY earlier image to re-classify</li>
+      <li><span class="key">&larr;</span>/<span class="key">&rarr;</span> prev / next</li>
+      <li><span class="key">&larr;</span> goes back to ANY earlier image to re-classify</li>
     </ul>
 
     <h2>Progress</h2>
@@ -91,7 +95,13 @@
 
 <script>
 "use strict";
-const TASK = "cleandone";
+// Injected by app_classify.index() from TASK_UI + db.cls_labels(task) — the
+// page has no hardcoded label vocabulary, so a new task needs no JS change.
+const TASK = {{ task | tojson }};
+const LABELS = {{ labels | tojson }};            // [{name, key, color}, ...]
+const BY_KEY = new Map(LABELS.map((l) => [l.key, l.name]));
+const COLOR = new Map(LABELS.map((l) => [l.name, l.color]));
+
 const frameEl = document.getElementById("frame");
 const doneEl = document.getElementById("done");
 const photo = document.getElementById("photo");
@@ -100,7 +110,7 @@ const wasbadgeEl = document.getElementById("wasbadge");
 const priobadgeEl = document.getElementById("priobadge");
 
 let fileId = null;
-let label = null;      // saved label for (fileId, TASK): 'dirty'|'clean'|null
+let label = null;      // saved label for (fileId, TASK): one of LABELS names, or null
 const visited = [];
 let histIndex = -1;
 const undoStack = [];  // {file_id, prevLabel} — most recent classify() calls, this session
@@ -193,8 +203,8 @@ function setItem(d) {
   wasbadgeEl.classList.toggle("on", !!label);
   wasbadgeEl.textContent = label ? `was: ${label}` : "";
   priobadgeEl.classList.toggle("on", !!d.priority);
-  frameEl.classList.toggle("dirty", label === "dirty");
-  frameEl.classList.toggle("clean", label === "clean");
+  // Frame echoes the saved verdict's colour (neutral grey when undecided).
+  frameEl.style.borderColor = (label && COLOR.get(label)) || "#3a3f49";
   photo.src = `/image/${d.file_id}?t=${d.file_id}`;
   updateButtons();
 }
@@ -205,23 +215,25 @@ function showDone() {
   updateButtons();
 }
 function updateButtons() {
-  ["btnDirty", "btnClean", "btnSkip", "btnDelete"].forEach((id) =>
+  document.querySelectorAll(".btn.verdict").forEach((b) => (b.disabled = !fileId));
+  ["btnSkip", "btnDelete"].forEach((id) =>
     (document.getElementById(id).disabled = !fileId));
   document.getElementById("btnUndo").disabled = !undoStack.length;
 }
 function refreshProgress() {
   fetch(`/api/progress?task=${TASK}`).then((r) => r.json()).then((p) => {
     const c = p.tasks[TASK];
+    const per = c.labels.map((n) => `${c[n]} ${n}`).join(" · ");
     const prio = c.priority_total
       ? ` · <span class="prio">priority ${c.priority_remaining}/${c.priority_total} left</span>`
       : "";
     document.getElementById("counts").innerHTML =
-      `<div><b>${TASK}</b>: ${c.decided}/${c.total} · ${c.dirty} dirty · ${c.clean} clean · ${c.remaining} left${prio}</div>`;
+      `<div><b>${TASK}</b>: ${c.decided}/${c.total} · ${per} · ${c.remaining} left${prio}</div>`;
   });
 }
 
-document.getElementById("btnDirty").onclick = () => classify("dirty");
-document.getElementById("btnClean").onclick = () => classify("clean");
+document.querySelectorAll(".btn.verdict").forEach((b) =>
+  (b.onclick = () => classify(b.dataset.label)));
 document.getElementById("btnSkip").onclick = skip;
 document.getElementById("btnUndo").onclick = undo;
 document.getElementById("btnDelete").onclick = deleteImage;
@@ -232,12 +244,9 @@ document.addEventListener("keydown", (e) => {
   if (k === "arrowright") { e.preventDefault(); goNext(); return; }
   if (k === "z") { undo(); return; }
   if (!fileId) return;
-  switch (k) {
-    case "d": classify("dirty"); break;
-    case "c": classify("clean"); break;
-    case "s": skip(); break;
-    case "x": deleteImage(); break;
-  }
+  if (BY_KEY.has(k)) { classify(BY_KEY.get(k)); return; }
+  if (k === "s") { skip(); return; }
+  if (k === "x") { deleteImage(); return; }
 });
 
 refreshProgress();
